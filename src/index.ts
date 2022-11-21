@@ -1,26 +1,43 @@
-console.log('Try npm run lint/fix!');
+import * as path from 'path';
+import { WorkerQueue } from './lib/Worker-Queue';
+import CommentAnalyzer from './lib/CommentAnalyzer';
 
-const longString =
-  'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer ut aliquet diam.';
+(async () => {
+  const commentAnalyzer = new CommentAnalyzer();
+  const commentsResults: any[] = [];
+  const files = commentAnalyzer.getFiles('docs/');
+  const pool = new WorkerQueue<{ i: number }, number>(
+    path.join(__dirname, './lib/worker.js'),
+    files.length
+  );
 
-const trailing = 'Semicolon';
+  Promise.all(
+    files.map(async (file, i) => {
+      const result = await pool.startWorker(() => ({
+        i,
+        file,
+      }));
+      commentsResults.push(result);
+    })
+  ).then(_ => {
+    console.log('**finished processing all files** \n');
 
-const why = 'am I tabbed?';
+    // combine all the workers results into a single result
+    const finalResult = commentsResults.reduce((acc, curr) => {
+      for (const [key, value] of curr) {
+        if (acc[key]) {
+          acc[key] += value;
+        } else {
+          acc[key] = value;
+        }
+      }
+      return acc;
+    }, {});
 
-export function doSomeStuff(
-  withThis: string,
-  andThat: string,
-  andThose: string[]
-) {
-  //function on one line
-  if (!andThose.length) {
-    return false;
-  }
-  console.log(withThis);
-  console.log(andThat);
-  console.dir(andThose);
-  return;
-}
-// TODO: more examples
+    console.log('PRINTING FINAL RESULT \n');
 
-doSomeStuff('withThis', 'andThat', ['andThose']);
+    for (const [key, value] of Object.entries(finalResult)) {
+      console.log(`${key} : ${value}`);
+    }
+  });
+})();
